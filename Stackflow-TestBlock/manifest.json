@@ -1,0 +1,16 @@
+{
+	"name": "TestBlock",
+	"namespace": "Stackflow",
+	"version_number": "1.0.0",
+	"website_url": "https://github.com/stackflow",
+	"description": "Mod de teste da integracao GML: registra um bloco novo (Ruby) e hooka PlacedBlock para provar o pipeline.",
+	"dependencies": [],
+	"extra": {
+		"godot": {
+			"authors": ["Stackflow"],
+			"compatible_mod_loader_version": ["7.0.0"],
+			"compatible_game_version": ["1.1.0"],
+			"incompatibilities": []
+		}
+	}
+}
