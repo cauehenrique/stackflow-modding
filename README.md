@@ -13,6 +13,7 @@ If you've never used GML before, read the official [Mod Developer wiki](https://
 3. [The manifest](#the-manifest)
 4. [Your mod entry script](#your-mod-entry-script)
 5. [Adding a new block](#adding-a-new-block)
+   - [Recipe](#recipe)
 6. [Hooking existing logic](#hooking-existing-logic)
 7. [Textures](#textures)
 8. [Packing & distributing](#packing--distributing)
@@ -126,7 +127,7 @@ BaseBlock.new(id, groups, min_amount, max_amount, recipe = [], price = 0, unlock
 | `id` | `StringName` | Unique id. **Namespace it** (`"yourmod.ruby"`) to avoid collisions. |
 | `groups` | `Array[GameData.BlockGroups]` | Synergy groups (e.g. `MINERALS`, `CASINO`). |
 | `min_amount` / `max_amount` | `int` | How many of this block a piece can contain. |
-| `recipe` | `Array[StringName]` | Crafting recipe (empty = always available). |
+| `recipe` | `Array[StringName]` | **Unlock requirement** — the block only appears in the Block Reward once the player already owns **at least one** of these block ids in their original deck. Empty = no requirement, always eligible. See [Recipe](#recipe). |
 | `price` | `int` | Cost in the Block Selection screen (`0` = free). |
 | `unlock_round` | `int` | Round the block becomes eligible (`0` = from the start). |
 
@@ -155,6 +156,21 @@ func _register_blocks() -> void:
 ```
 
 That's it — the block now shows up in rolls and runs its effect on line clear.
+
+### Recipe
+
+`recipe` controls **when** a block becomes eligible to appear in the Block Reward, based on what the player already has. It is **not** a crafting recipe.
+
+The rule is a logical **OR**: the block is only offered once the player owns **at least one** of the listed block ids in their **original deck**. If the list is empty there's no requirement and the block is eligible from the start (subject to `unlock_round` and `price`).
+
+```gdscript
+# Only offered once the player already runs iron OR bronze.
+var ruby := BaseBlock.new(&"yourmod.ruby", [GameData.BlockGroups.MINERALS], 3, 5, [&"iron", &"bronze"])
+```
+
+Use it to gate synergy blocks behind their partners — the reward stays hidden until owning it makes sense.
+
+Note that `recipe` is one of several eligibility gates. A block is offered only when **all** of these pass: `max_amount > 0`, `current_round >= unlock_round`, the player can afford `price`, the recipe requirement (above) is met, and — for blocks with more than one group — the player already owns a block from at least one of those groups.
 
 ---
 
