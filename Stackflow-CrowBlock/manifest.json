@@ -1,0 +1,22 @@
+{
+	"name": "CrowBlock",
+	"namespace": "Stackflow",
+	"version_number": "1.0.0",
+	"website_url": "https://github.com/cauehenrique/stackflow-modding",
+	"description": "Example mod: the Crow block reacts to its neighbours being destroyed (set_on_block_destroyed).",
+	"dependencies": [],
+	"extra": {
+		"godot": {
+			"authors": [
+				"Stackflow"
+			],
+			"compatible_mod_loader_version": [
+				"7.0.0"
+			],
+			"compatible_game_version": [
+				"1.3.0"
+			],
+			"incompatibilities": []
+		}
+	}
+}

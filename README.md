@@ -8,16 +8,60 @@ If you've never used GML before, read the official [Mod Developer wiki](https://
 
 ## Table of contents
 
-1. [How mods load](#how-mods-load)
-2. [Mod folder structure](#mod-folder-structure)
-3. [The manifest](#the-manifest)
-4. [Your mod entry script](#your-mod-entry-script)
-5. [Adding a new block](#adding-a-new-block)
+1. [Quick start (no Godot needed)](#quick-start-no-godot-needed)
+2. [Examples](#examples)
+3. [API reference](#api-reference)
+4. [How mods load](#how-mods-load)
+5. [Mod folder structure](#mod-folder-structure)
+6. [The manifest](#the-manifest)
+7. [Your mod entry script](#your-mod-entry-script)
+8. [Adding a new block](#adding-a-new-block)
    - [Recipe](#recipe)
-6. [Hooking existing logic](#hooking-existing-logic)
-7. [Textures](#textures)
-8. [Packing & distributing](#packing--distributing)
-9. [Full working example](#full-working-example)
+   - [Name & description](#name--description)
+9. [Changing core blocks](#changing-core-blocks)
+10. [Hooking existing logic](#hooking-existing-logic)
+11. [Textures](#textures)
+12. [Packing & publishing to the Steam Workshop](#packing--publishing-to-the-steam-workshop)
+
+---
+
+## Quick start (no Godot needed)
+
+You only need a text editor and the game.
+
+1. Open Stackflow → **Mods** (bottom-right of the main menu) → **Open folder**. This opens `mods-source/` next to the game executable.
+2. Copy [`Stackflow-TestBlock/`](Stackflow-TestBlock) from this repo into it and rename it `YourName-YourMod` (also update `namespace`/`name` in `manifest.json`).
+3. Edit `mod_main.gd`, drop PNGs in `textures/` (plain PNGs work — no import step).
+4. Back in the **Mods** screen, click **Pack**: your folder is zipped into `mods/YourName-YourMod.zip`.
+5. Restart the game. Your mod shows under **Loaded mods** (red = failed; details in the log, see below).
+6. When it works, click **Publish** to upload it to the Steam Workshop.
+
+**Logs:** every load error is written to `modloader.log` in the game's user data folder (`%APPDATA%/Stackflow/logs/` on Windows, `~/.local/share/Stackflow/logs/` on Linux).
+
+---
+
+## Examples
+
+Each folder in this repo is a complete mod: copy one into `mods-source/` and click **Pack**.
+
+| Mod | Shows |
+|---|---|
+| [`Stackflow-TestBlock`](Stackflow-TestBlock) | Minimal new block (Ruby) with its own PNG, translations, and a script hook. Start here. |
+| [`Stackflow-FuseBlock`](Stackflow-FuseBlock) | Per-instance state: `set_on_place` starts a `Timer` that charges the block every second. |
+| [`Stackflow-CrowBlock`](Stackflow-CrowBlock) | Reacting to other blocks: `set_on_block_destroyed`, plus a `recipe` gate. |
+| [`Stackflow-VanillaTweaks`](Stackflow-VanillaTweaks) | Changing core blocks: edit metadata and wrap a vanilla effect. |
+
+---
+
+## API reference
+
+[`API.md`](API.md) lists every class, method, property, signal and enum a mod is meant to use (`BaseBlock`, `PlacedBlock`, `GameManager`, `GameData`, ...), with their doc comments. Anything not listed there is internal and may change between game versions.
+
+`API.md` is generated from the game's source with Godot's doctool:
+
+```sh
+python3 tools/generate_api.py --game ../stackflow --godot godot
+```
 
 ---
 
@@ -38,10 +82,10 @@ The boot order that matters to you:
 
 ## Mod folder structure
 
-A mod is a folder inside `mods-unpacked/` during development (GML unpacks packed mods here at runtime):
+A mod is a folder inside `mods-source/` (next to the game executable). Inside the packed zip it lives under `mods-unpacked/`, which is the path your code sees at runtime:
 
 ```
-mods-unpacked/
+mods-source/
 └── YourName-YourMod/
     ├── manifest.json      # required metadata
     ├── mod_main.gd        # required entry script
@@ -69,7 +113,7 @@ The folder name **must** be `Namespace-Name` and match the `namespace` + `name` 
         "godot": {
             "authors": ["YourName"],
             "compatible_mod_loader_version": ["7.0.0"],
-            "compatible_game_version": ["1.1.0"],
+            "compatible_game_version": ["1.3.0"],
             "incompatibilities": []
         }
     }
@@ -172,6 +216,38 @@ Use it to gate synergy blocks behind their partners — the reward stays hidden 
 
 Note that `recipe` is one of several eligibility gates. A block is offered only when **all** of these pass: `max_amount > 0`, `current_round >= unlock_round`, the player can afford `price`, the recipe requirement (above) is met, and — for blocks with more than one group — the player already owns a block from at least one of those groups.
 
+### Name & description
+
+Block texts come from translation keys built from the **upper-cased id**: `BLOCK_<ID>` and `BLOCK_<ID>_DESCRIPTION` (`yourmod.ruby` → `BLOCK_YOURMOD.RUBY`). Register them at runtime in `_ready()`; English is the fallback for languages you don't provide:
+
+```gdscript
+var english := Translation.new()
+english.locale = "en"
+english.add_message("BLOCK_YOURMOD.RUBY", "Ruby")
+english.add_message("BLOCK_YOURMOD.RUBY_DESCRIPTION", "Gives [points:+50] when destroyed.")
+TranslationServer.add_translation(english)
+```
+
+Descriptions support the game's tags: `[points:+50]`, `[multiplier:+10]`, `[group:minerals]`, and colors such as `[yellow]text[white]`.
+
+---
+
+## Changing core blocks
+
+Inside your `blocks_ready` handler, `BlockRegistry.get_block(&"iron")` returns the live core block. Change its fields directly (`price`, `min_amount`, `max_amount`, `recipe`, ...) or extend its effect by wrapping the current one, so other mods' changes are kept:
+
+```gdscript
+var stone: BaseBlock = BlockRegistry.get_block(&"stone")
+var previous_effect: Callable = stone.get_destroy_effect()
+
+stone.set_destroy_effect(func(ctx: DestroyEffectContext) -> void:
+    previous_effect.call(ctx)
+    GameManager.add_points(5)
+)
+```
+
+See [`Stackflow-VanillaTweaks`](Stackflow-VanillaTweaks).
+
 ---
 
 ## Hooking existing logic
@@ -213,18 +289,28 @@ Point a block's `texture_path` at a PNG inside your mod folder:
 ruby.texture_path = ModLoaderMod.get_unpacked_dir() + MOD_ID + "/textures/ruby.png"
 ```
 
-`get_unpacked_dir()` resolves to wherever GML unpacked your mod, so the path works both in dev and from a packed mod. You can also reuse a core sprite (`"res://images/blocks/default/red.png"`) if you don't ship your own art.
+`get_unpacked_dir()` is the `res://mods-unpacked/` path your zip is mounted at. Plain PNGs work as-is (no Godot import step); block sprites are 12×12 pixels. You can also reuse a core sprite (`"res://images/blocks/default/red.png"`) if you don't ship your own art.
 
 ---
 
-## Packing & distributing
+## Packing & publishing to the Steam Workshop
 
-1. Develop inside `mods-unpacked/YourName-YourMod/`.
-2. Pack the folder into a `.zip` following the [GML export guide](https://wiki.godotmodding.com/guides/modding/distributing_mods/).
-3. Ship the zip; players drop it in the game's `mods/` folder.
+Everything happens in the in-game **Mods** screen; you never build the zip by hand.
 
----
+```
+mods-source/
+└── YourName-YourMod/
+    ├── manifest.json
+    ├── mod_main.gd
+    ├── textures/ruby.png
+    ├── preview.png      # optional: Workshop thumbnail (under 1 MB, not packed)
+    └── workshop.json    # created on first publish: keeps your item id (not packed)
+```
 
-## Full working example
+- **Pack** builds the zip GML expects (`mods-unpacked/YourName-YourMod/...` inside) and installs it in `mods/` for local testing.
+- **Publish** packs, then uploads to the Workshop. The first publish creates the item (title and description come from `manifest.json`) and opens its page in the Steam overlay: accept the Workshop agreement there if Steam asks, then edit the description, tags and visibility. Later publishes update the same item (via `workshop.json`) and only replace the files; the change note is your `version_number`.
+- Players subscribe on the Workshop page; Steam downloads the item and the game loads it on the next launch.
 
-The repo ships a reference mod at `mods-unpacked/Stackflow-TestBlock/` that proves both mechanisms — a new `stackflow.ruby` block and a `PlacedBlock` hook. Read `mod_main.gd` there for a complete, commented example.
+> Remove your local `mods/YourName-YourMod.zip` once you're subscribed to your own Workshop item, or the mod loads twice.
+
+You can still share the zip from `mods/` directly: players drop it into their own `mods/` folder.
